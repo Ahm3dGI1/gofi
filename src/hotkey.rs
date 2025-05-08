@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 // This will track the currently held modifier keys
-fn useKey() {
+pub fn use_key() {
     let modifiers = Arc::new(Mutex::new(HashSet::new()));
     let modifiers_clone = modifiers.clone();
 
