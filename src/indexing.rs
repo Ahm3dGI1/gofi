@@ -1,13 +1,12 @@
 use std::error::Error;
 use walkdir::WalkDir;
 
-fn get_paths(directories: &[String]) -> Result<(), Box<dyn Error>> {
-    for directory in directories {
-        for entry in WalkDir::new(directory).into_iter().filter_map(|e| e.ok()) {
-            if entry.file_type().is_file() {
-                println!("{}", entry.path().display());
-            }
+pub fn get_paths(directory: String) -> Result<Vec<std::path::PathBuf>, Box<dyn Error>> {
+    let mut paths = Vec::new();
+    for entry in WalkDir::new(directory).into_iter().filter_map(|e| e.ok()) {
+        if entry.file_type().is_file() {
+            paths.push(entry.path().to_path_buf());
         }
     }
-    Ok(())
+    Ok(paths)
 }
