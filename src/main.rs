@@ -1,6 +1,8 @@
 mod hotkey;
 mod indexing;
 
+use fuzzy_matcher::FuzzyMatcher;
+use fuzzy_matcher::skim::SkimMatcherV2;
 use std::io;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,18 +21,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .filter_map(|p| p.to_str().map(|s| s.to_string()))
         .collect();
 
-    // Filter search results
-    let search_result: Vec<String> = all_paths
+    let matcher = SkimMatcherV2::default();
+
+    let match_results: Vec<(i64, String)> = all_paths
         .iter()
-        .filter(|path| path.to_lowercase().contains(&query.to_lowercase()))
-        .cloned()
+        .filter_map(|path| {
+            matcher
+                .fuzzy_match(path, query)
+                .map(|score| (score, path.clone()))
+        })
         .collect();
 
-    print!(
-        "{} results found for query '{}':\n",
-        search_result.len(),
-        query
-    );
+    print!("Search results:\n");
+    for (score, path) in match_results.iter() {
+        println!("Score: {}, Path: {}", score, path);
+    }
 
     Ok(())
 }
