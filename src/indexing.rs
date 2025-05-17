@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::{error::Error, path::PathBuf};
 use walkdir::WalkDir;
 
@@ -27,4 +28,15 @@ pub fn get_paths(directory: String) -> Result<Vec<IndexedFile>, Box<dyn Error>> 
         }
     }
     Ok(paths)
+}
+
+pub fn hash_files(directory: String) -> HashMap<String, IndexedFile> {
+    let files = get_paths(directory).unwrap_or_else(|_| Vec::new());
+
+    // Use a HashMap to store file names and their hashes
+    let mut file_hashes = HashMap::new();
+    for file in files {
+        file_hashes.insert(file.file_name.clone(), file);
+    }
+    file_hashes
 }
