@@ -16,25 +16,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let query = query.trim();
 
     // Get all paths as Strings
-    let all_paths: Vec<String> = indexing::get_paths("D:/".to_string())?
-        .iter()
-        .filter_map(|p| p.to_str().map(|s| s.to_string()))
-        .collect();
+    let all_files: Vec<indexing::IndexedFile> = indexing::get_paths("D:/".to_string())?;
 
     let matcher = SkimMatcherV2::default();
 
-    let match_results: Vec<(i64, String)> = all_paths
+    let mut matches: Vec<(i64, indexing::IndexedFile)> = all_files
         .iter()
-        .filter_map(|path| {
-            matcher
-                .fuzzy_match(path, query)
-                .map(|score| (score, path.clone()))
+        .filter_map(|file| {
+            let name_score = matcher.fuzzy_match(&file.file_name, query)?;
+            let parent_score = file.parent_path.len() as i64;
+            let total_score = name_score * 3 - parent_score; // Weighted
+            Some((total_score, file.clone()))
         })
         .collect();
 
+    matches.sort_by(|a, b| b.0.cmp(&a.0)); // Best matches first
+    matches.truncate(10); // Limit to top 10 matches
+
     print!("Search results:\n");
-    for (score, path) in match_results.iter() {
-        println!("Score: {}, Path: {}", score, path);
+    for (score, file) in matches.iter() {
+        println!("Score: {}, Path: {}", score, file.full_path.display());
     }
 
     Ok(())
