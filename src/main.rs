@@ -3,11 +3,12 @@ mod indexing;
 
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
+use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let hashed_files = indexing::hash_files("D:/".to_string());
+    let hashed_files = indexing::hash_files(String::from("D:/"));
 
     loop {
         println!("Enter your search query:");
@@ -19,31 +20,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let query = query.trim();
 
-        let files_names: Vec<String> = hashed_files.keys().cloned().collect();
+        if query.is_empty() {
+            println!("Exiting search.");
+            break;
+        }
 
-        let matcher = SkimMatcherV2::default();
+        let matches = fuzzy_search(query, &hashed_files);
 
-        let mut matches: Vec<(i64, PathBuf)> = files_names
-            .iter()
-            .filter_map(|name| {
-                let name_score = matcher.fuzzy_match(name, query)?;
-                let parent_score = hashed_files.get(name).unwrap().parent_path.len() as i64;
-                let total_score = name_score * 3 - parent_score; // Weighted
-                Some((
-                    total_score,
-                    hashed_files.get(name).unwrap().full_path.clone(),
-                ))
-            })
-            .collect();
-
-        matches.sort_by(|a, b| b.0.cmp(&a.0)); // Best matches first
-        matches.truncate(10); // Limit to top 10 matches
-
-        print!("Search results:\n");
+        println!("Search results:\n");
         for (score, file) in matches.iter() {
             println!("Score: {}, Path: {}", score, file.display());
         }
     }
 
     Ok(())
+}
+
+pub fn fuzzy_search(
+    query: &str,
+    files: &HashMap<String, Vec<indexing::IndexedFile>>,
+) -> Vec<(i64, PathBuf)> {
+    let matcher = SkimMatcherV2::default();
+    let mut matches: Vec<(i64, PathBuf)> = Vec::new();
+
+    for (name, file_list) in files.iter() {
+        if let Some(name_score) = matcher.fuzzy_match(name, query) {
+            for file in file_list {
+                let depth_score =
+                    file.parent_path.matches(std::path::MAIN_SEPARATOR).count() as i64;
+                let total_score = name_score * 3 - depth_score;
+                matches.push((total_score, file.full_path.clone()));
+            }
+        }
+    }
+
+    matches.sort_by(|a, b| b.0.cmp(&a.0)); // Best matches first
+    matches.truncate(10); // Limit to top 10 results
+
+    matches
 }

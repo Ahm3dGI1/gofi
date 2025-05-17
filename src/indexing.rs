@@ -30,13 +30,22 @@ pub fn get_paths(directory: String) -> Result<Vec<IndexedFile>, Box<dyn Error>> 
     Ok(paths)
 }
 
-pub fn hash_files(directory: String) -> HashMap<String, IndexedFile> {
-    let files = get_paths(directory).unwrap_or_else(|_| Vec::new());
+pub fn hash_files(directory: String) -> HashMap<String, Vec<IndexedFile>> {
+    let files = match get_paths(directory) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Failed to index directory: {}", e);
+            Vec::new()
+        }
+    };
 
-    // Use a HashMap to store file names and their hashes
     let mut file_hashes = HashMap::new();
     for file in files {
-        file_hashes.insert(file.file_name.clone(), file);
+        file_hashes
+            .entry(file.file_name.clone())
+            .or_insert_with(Vec::new)
+            .push(file);
     }
+
     file_hashes
 }
