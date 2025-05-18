@@ -1,8 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::{error::Error, path::PathBuf};
 use walkdir::WalkDir;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexedFile {
     pub full_path: PathBuf,
     pub file_name: String,
@@ -47,5 +48,24 @@ pub fn hash_files(directory: String) -> HashMap<String, Vec<IndexedFile>> {
             .push(file);
     }
 
+    save_cache(&file_hashes, "./cache/file_hashes.json").expect("Failed to save cache");
+
     file_hashes
+}
+
+pub fn save_cache(
+    map: &HashMap<String, Vec<IndexedFile>>,
+    path: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let data = bincode::serialize(map)?;
+    std::fs::write(path, data)?;
+    Ok(())
+}
+
+pub fn load_cache(
+    path: &str,
+) -> Result<HashMap<String, Vec<IndexedFile>>, Box<dyn std::error::Error>> {
+    let data = std::fs::read(path)?;
+    let map = bincode::deserialize(&data)?;
+    Ok(map)
 }

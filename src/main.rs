@@ -8,7 +8,12 @@ use std::io;
 use std::path::PathBuf;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let hashed_files = indexing::hash_files(String::from("D:/"));
+    let hashed_files = if std::path::Path::new("./cache/file_hashes.json").exists() {
+        indexing::load_cache("./cache/file_hashes.json")?
+    } else {
+        let index = indexing::hash_files("D:/".to_string());
+        index
+    };
 
     loop {
         println!("Enter your search query:");
