@@ -1,11 +1,39 @@
-mod hotkey;
-mod indexing;
-
+use eframe::egui;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use std::collections::HashMap;
 use std::io;
 use std::path::PathBuf;
+
+mod hotkey;
+mod indexing;
+
+#[derive(Default)]
+struct GofiApp {
+    query: String,
+    results: Vec<(i64, PathBuf)>,
+    file_map: HashMap<String, Vec<indexing::IndexedFile>>,
+}
+
+impl eframe::App for GofiApp {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Gofi: Fuzzy File Finder");
+
+            // Search input
+            let changed = ui.text_edit_singleline(&mut self.query).changed();
+
+            if changed {
+                self.results = fuzzy_search(&self.query, &self.file_map);
+            }
+
+            // Results display
+            for (score, path) in &self.results {
+                ui.label(format!("({}) {}", score, path.display()));
+            }
+        });
+    }
+}
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let hashed_files = if std::path::Path::new("./cache/file_hashes.json").exists() {
@@ -15,28 +43,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         index
     };
 
-    loop {
-        println!("Enter your search query:");
-        // Read user input
-        let mut query = String::new();
-        io::stdin()
-            .read_line(&mut query)
-            .expect("Failed to read line");
+    let app = GofiApp {
+        file_map: hashed_files,
+        ..Default::default()
+    };
 
-        let query = query.trim();
-
-        if query.is_empty() {
-            println!("Exiting search.");
-            break;
-        }
-
-        let matches = fuzzy_search(query, &hashed_files);
-
-        println!("Search results:\n");
-        for (score, file) in matches.iter() {
-            println!("Score: {}, Path: {}", score, file.display());
-        }
-    }
+    let options = eframe::NativeOptions::default();
+    eframe::run_native("Gofi", options, Box::new(|_cc| Box::new(app)));
 
     Ok(())
 }
