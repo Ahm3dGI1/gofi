@@ -20,55 +20,55 @@ struct GofiApp {
 impl eframe::App for GofiApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Gofi: Fuzzy File Finder");
+            ui.vertical_centered(|ui| {
+                // Search input
+                let changed = ui.text_edit_singleline(&mut self.query).changed();
 
-            // Search input
-            let changed = ui.text_edit_singleline(&mut self.query).changed();
+                if changed && self.query != self.last_query {
+                    self.last_query = self.query.clone();
 
-            if changed && self.query != self.last_query {
-                self.last_query = self.query.clone();
+                    let query = self.query.clone();
+                    let file_map = self.file_map.clone();
+                    let shared_results = Arc::clone(&self.shared_results);
 
-                let query = self.query.clone();
-                let file_map = self.file_map.clone();
-                let shared_results = Arc::clone(&self.shared_results);
-
-                thread::spawn(move || {
-                    let results = fuzzy_search(&query, &file_map);
-                    if let Ok(mut lock) = shared_results.lock() {
-                        *lock = results;
-                    }
-                });
-            }
-
-            // Results display
-            if let Ok(results) = self.shared_results.lock() {
-                for (_score, name, path) in results.iter().take(10) {
-                    ui.label(format!("{} : {}", name, path.display()));
+                    thread::spawn(move || {
+                        let results = fuzzy_search(&query, &file_map);
+                        if let Ok(mut lock) = shared_results.lock() {
+                            *lock = results;
+                        }
+                    });
                 }
-            }
+
+                // Results display
+                if let Ok(results) = self.shared_results.lock() {
+                    for (_score, name, path) in results.iter().take(10) {
+                        ui.label(format!("{} : {}", name, path.display()));
+                    }
+                }
+            });
         });
         ctx.request_repaint(); // Ensures smooth updates
     }
 }
 
 fn main() -> Result<(), eframe::Error> {
-    let hashed_files = if std::path::Path::new("./cache/file_hashes.json").exists() {
-        indexing::load_cache("./cache/file_hashes.json").unwrap_or_else(|_| {
-            eprintln!("Cache not found, re-indexing...");
-            indexing::hash_files("D:/".to_string())
-        })
-    } else {
-        let index = indexing::hash_files("D:/".to_string());
-        index
-    };
+    let hashed_files = indexing::load_cache("./cache/file_hashes.json").unwrap_or_else(|_| {
+        eprintln!("Cache not found, re-indexing...");
+        indexing::hash_files("D:/".to_string())
+    });
 
     let app = GofiApp {
         file_map: hashed_files,
         ..Default::default()
     };
 
-    let options = eframe::NativeOptions::default();
-    eframe::run_native("Gofi", options, Box::new(|_cc| Ok(Box::new(app))));
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([600.0, 200.0])
+            .with_min_inner_size([400.0, 100.0]),
+        ..Default::default()
+    };
+    let _ = eframe::run_native("Gofi", options, Box::new(|_cc| Ok(Box::new(app))));
 
     Ok(())
 }
