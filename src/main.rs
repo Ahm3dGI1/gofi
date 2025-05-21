@@ -2,8 +2,9 @@ use eframe::egui;
 use fuzzy_matcher::FuzzyMatcher;
 use fuzzy_matcher::skim::SkimMatcherV2;
 use std::collections::HashMap;
-use std::io;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 mod hotkey;
 mod indexing;
@@ -11,8 +12,9 @@ mod indexing;
 #[derive(Default)]
 struct GofiApp {
     query: String,
-    results: Vec<(i64, PathBuf)>,
+    last_query: String,
     file_map: HashMap<String, Vec<indexing::IndexedFile>>,
+    shared_results: Arc<Mutex<Vec<(i64, String, PathBuf)>>>,
 }
 
 impl eframe::App for GofiApp {
@@ -23,21 +25,38 @@ impl eframe::App for GofiApp {
             // Search input
             let changed = ui.text_edit_singleline(&mut self.query).changed();
 
-            if changed {
-                self.results = fuzzy_search(&self.query, &self.file_map);
+            if changed && self.query != self.last_query {
+                self.last_query = self.query.clone();
+
+                let query = self.query.clone();
+                let file_map = self.file_map.clone();
+                let shared_results = Arc::clone(&self.shared_results);
+
+                thread::spawn(move || {
+                    let results = fuzzy_search(&query, &file_map);
+                    if let Ok(mut lock) = shared_results.lock() {
+                        *lock = results;
+                    }
+                });
             }
 
             // Results display
-            for (score, path) in &self.results {
-                ui.label(format!("({}) {}", score, path.display()));
+            if let Ok(results) = self.shared_results.lock() {
+                for (_score, name, path) in results.iter().take(10) {
+                    ui.label(format!("{} : {}", name, path.display()));
+                }
             }
         });
+        ctx.request_repaint(); // Ensures smooth updates
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> Result<(), eframe::Error> {
     let hashed_files = if std::path::Path::new("./cache/file_hashes.json").exists() {
-        indexing::load_cache("./cache/file_hashes.json")?
+        indexing::load_cache("./cache/file_hashes.json").unwrap_or_else(|_| {
+            eprintln!("Cache not found, re-indexing...");
+            indexing::hash_files("D:/".to_string())
+        })
     } else {
         let index = indexing::hash_files("D:/".to_string());
         index
@@ -49,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let options = eframe::NativeOptions::default();
-    eframe::run_native("Gofi", options, Box::new(|_cc| Box::new(app)));
+    eframe::run_native("Gofi", options, Box::new(|_cc| Ok(Box::new(app))));
 
     Ok(())
 }
@@ -57,9 +76,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 pub fn fuzzy_search(
     query: &str,
     files: &HashMap<String, Vec<indexing::IndexedFile>>,
-) -> Vec<(i64, PathBuf)> {
+) -> Vec<(i64, String, PathBuf)> {
     let matcher = SkimMatcherV2::default();
-    let mut matches: Vec<(i64, PathBuf)> = Vec::new();
+    let mut matches: Vec<(i64, String, PathBuf)> = Vec::new();
 
     for (name, file_list) in files.iter() {
         if let Some(name_score) = matcher.fuzzy_match(name, query) {
@@ -67,7 +86,7 @@ pub fn fuzzy_search(
                 let depth_score =
                     file.parent_path.matches(std::path::MAIN_SEPARATOR).count() as i64;
                 let total_score = name_score * 3 - depth_score;
-                matches.push((total_score, file.full_path.clone()));
+                matches.push((total_score, file.file_name.clone(), file.full_path.clone()));
             }
         }
     }
